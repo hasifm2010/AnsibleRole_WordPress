@@ -1,0 +1,16 @@
+---
+
+- name: Setting UP WordPress 
+  hosts: all
+  become: yes
+  user: ansible
+  pre_tasks:
+    - debug:
+        msg: "WordPress Install begins"
+  
+  roles:
+    - role: wordpress
+
+  post_tasks:
+    - debug:
+        msg: "WordPress Install Ends"

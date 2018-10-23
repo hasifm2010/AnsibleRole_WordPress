@@ -1,0 +1,257 @@
+---
+# tasks file for wordpress
+
+- name: Ping google.com
+  command: ping -c 5 google.com
+  register: ping_check
+  changed_when: false
+
+- name: Playbook fails if no internet
+  fail:
+    msg: "Internet Connectivity is required to process this playbook"
+  when: ping_check.rc != 0
+- debug:
+    msg: "Please check your internet connectivity"
+  when: ping_check.rc != 0
+
+- name: Apply latest updates [rpm]
+  yum:
+    name: '*'
+    state: latest
+  async: 1200
+  poll: 10
+  when: 
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+    - os_upgrade
+  register: apply_patch
+
+- name: Apply latest updates [deb]
+  apt:
+    name: '*'
+    state: latest
+    update_cache: yes
+  when:
+    - ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+    - os_upgrade
+  register: apply_patch
+
+- name: Reboot server
+  command: shutdown -r +1 "Ansible Updates triggered"
+  async: 1
+  poll: 0
+  ignore_errors: yes
+  when: apply_patch.changed
+
+- name: Wait for server to come up
+  wait_for:
+    host: "{{ inventory_hostname }}"
+    port: 22
+    state: started
+    delay: 80
+    timeout: 200
+  delegate_to: 127.0.0.1
+  when: apply_patch.changed
+
+
+
+- name: Install Web Packages {{ web_packages }}
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ web_packages }}"
+  when: inventory_hostname in groups ['webservers']
+
+- name: Start and enable HTTPD Service
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+    - "{{ web_service }}"
+  when: inventory_hostname in groups ['webservers']
+
+- name: Install Firewall Package {{ fw_packages }}
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ fw_packages }}"
+
+- name: Start and enable firewalld
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+    - "{{ fw_service }}"
+
+- name: Install mariadb packages
+  yum: 
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ db7_packages }}"
+  when: 
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "7") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "7")
+    - inventory_hostname in groups ['databases']
+
+- name: Install mysql packages
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ db6_packages }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "6") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "6")
+    - inventory_hostname in groups ['databases']
+    - remote_db is defined
+
+- name: Start and enable mariadb service
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+    - "{{ db7_service }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "7") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "7")
+    - inventory_hostname in groups ['databases']
+    - remote_db is defined
+
+- name: Start and enable mysql service
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+    - "{{ db6_service }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "6") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "6")
+    - inventory_hostname in groups ['databases']
+    - remote_db is defined
+
+
+- name: Install mariadb packages on local if no remote db
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ db7_packages }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "7") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "7")
+    - remote_db is not defined
+
+- name: Install mysql packages on local if no remote db
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - "{{ db6_packages }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "6") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "6")
+    - remote_db is not defined
+
+- name: Start and enable mariadb service
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+    - "{{ db7_service }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "7") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "7")
+    - remote_db is not defined
+
+- name: Start and enable mysql service
+  service:
+    name: "{{ item }}"
+    enabled: true
+  with_items:
+    - "{{ db7_service }}"
+  when:
+    - (ansible_distribution == "CentOS" and ansible_distribution_major_version == "7") or (ansible_distribution == "RedHat" and ansible_distribution_major_version == "7")
+    - remote_db is not defined
+
+
+- name: Keep Selinux Permissive mode
+  selinux:
+    policy: targeted
+    state: permissive
+  when: ansible_os_family == "RedHat"
+
+- name: Disable Selinux on all nodes
+  selinux:
+    state: disabled
+  when: ansible_os_family == "RedHat"
+
+#- name: Check WordPress is already Download or not
+#  stat:
+#    path: /tmp/wordpress
+#  register: download
+#  when: inventory_hostname in groups ['webservers']
+#  tags: down
+
+- name: Unzip WordPress file
+  unarchive:
+    src: https://wordpress.org/latest.zip
+    dest: /tmp
+    remote_src: yes
+  ignore_errors: true
+  when: 
+    - inventory_hostname in groups ['webservers'] 
+  register: download_zip
+
+
+- name: stat workpress folder
+  stat:
+    path: /var/www/html/index.php
+  register: word
+  when: inventory_hostname in groups ['webservers']
+
+
+- name: Remove existing wordpress folder
+  command: rm -rf /var/www/html/*
+  register: remove
+  when:
+    - inventory_hostname in groups ['webservers'] 
+    - word.stat.exists
+
+
+- name: Copy wordpress directory to Document root
+  shell: 'cp -ruf /tmp/wordpress/* /var/www/html/'
+  when: 
+    - inventory_hostname in groups ['webservers']
+  notify: restart httpd
+
+- name: Copy wp-config.php.j2 to remote location
+  template:
+    src: wp-config.php.j2
+    dest: /var/www/html/wp-config.php
+    owner: apache
+    group: apache
+    mode: 0640
+  when: inventory_hostname in groups ['webservers']
+
+- name: Configuring firewall rules
+  include: firewall_config.yml
+
+
+- name: Including initial task for MySQL
+  include: db_configure.yml
+  delegate_to: "{{ db_host }}"
+  when: inventory_hostname in groups ['databases']
+  tags: db
+
+- name: Test WebPage
+  uri:
+    url: http://192.168.122.31
+    statue_code: 200
+  delegate_to: localhost
+  register: web_content
+  tags: web
+
+- debug:
+    var: web_content
+  tags: web
+ 

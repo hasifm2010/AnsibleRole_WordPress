@@ -1,0 +1,17 @@
+
+- name: allow http
+  firewalld: 
+    service: "{{ http_rule }}"
+    state: enabled
+    permanent: true
+    immediate: true
+  when: inventory_hostname in groups ['webservers']
+
+- name: allow database connection
+  firewalld:
+    service: "{{ db_rule }}"
+    state: enabled
+    permanent: true
+    immediate: true
+    source: "{{ web_host }}" 
+  when: inventory_hostname in groups ['databases']

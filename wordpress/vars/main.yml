@@ -1,0 +1,41 @@
+---
+# vars file for wordpress
+
+
+doc_root: /var/www/html/wordpress
+
+web_packages: 
+  - httpd
+  - php
+  - php-mysql
+  - php-gd
+  - php-ldap
+  - php-odbc
+  - php-pear
+  - php-xml
+  - php-xmlrpc
+  - php-mbstring
+  - php-snmp
+  - php-soap
+  - curl
+  - zip
+  - unzip
+fw_packages: firewalld
+web_service: httpd
+fw_service: firewalld
+db7_packages: 
+  - mariadb-server
+  - MySQL-python
+db7_service: mariadb
+
+db6_packages: 
+  - mysql-server
+  - MySQL-python
+db6_service: mysqld
+
+epel_repo: epel-release
+php_myadmin: phpmyadmin
+
+
+http_rule: http
+db_rule: mysql

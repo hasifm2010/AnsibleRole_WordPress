@@ -1,0 +1,14 @@
+---
+# defaults file for wordpress
+
+
+remote_db:
+
+os_upgrade: False
+
+database_name: wordpress
+db_username: wp
+db_password: redhat
+db_host: 192.168.122.32
+mysql_root_password: redhat
+web_host: 192.168.122.31
